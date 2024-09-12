@@ -1,0 +1,2 @@
+lightphe
+pycryptodome
