@@ -1,11 +1,5 @@
 import unittest
-import sys
-import os
-
-# Add the parent directory (where src is located) to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-
-from zk_database import ZKDatabase
+from src.zk_database import ZKDatabase
 
 class TestZKDatabase(unittest.TestCase):
 
