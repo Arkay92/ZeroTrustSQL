@@ -1,20 +1,98 @@
+import hashlib
+import os
+import random
 from src.homomorphic_encryption import HomomorphicEncryption
 from src.zero_knowledge_proof import ZKProof
 from src.utils import str_to_int, int_to_str
 
+# User roles for Role-Based Access Control (RBAC)
+USER_ROLES = {
+    'admin': ['select', 'insert', 'update', 'delete'],
+    'read_only': ['select'],
+    'write_only': ['insert'],
+    'read_write': ['select', 'insert', 'update'],
+}
+
 class ZKDatabase:
-    def __init__(self):
+    def __init__(self, user_role='admin'):
         self.he = HomomorphicEncryption(lwe_dimension=512)
         self.zk_proof = ZKProof()
         self.tables = {}
         self.indexes = {}
+        self.role = user_role
+        self.transaction_log = []  # For transaction rollback
+        self.cache = {}  # Caching for queries
+        self.logs = []  # Logs of operations
 
+    # ----- Caching Functionality -----
+    def cache_query(self, query, result):
+        """Cache the result of a query."""
+        query_hash = hashlib.sha256(query.encode()).hexdigest()
+        self.cache[query_hash] = result
+
+    def get_cached_query(self, query):
+        """Retrieve cached result if available."""
+        query_hash = hashlib.sha256(query.encode()).hexdigest()
+        return self.cache.get(query_hash)
+
+    # ----- Role-Based Access Control -----
+    def check_permission(self, operation):
+        """ Check if the user role has the permission for the operation """
+        if operation not in USER_ROLES[self.role]:
+            raise PermissionError(f"Role '{self.role}' does not have permission for '{operation}' operation.")
+
+    # ----- Transaction Management -----
+    def begin_transaction(self):
+        """Start a transaction by capturing a snapshot of the current state."""
+        snapshot = {
+            'tables': {k: v.copy() for k, v in self.tables.items()},
+            'indexes': {k: v.copy() for k, v in self.indexes.items()}
+        }
+        self.transaction_log.append(snapshot)
+        print("Transaction started.")
+
+    def rollback(self):
+        """Rollback to the last saved state (undo last transaction)."""
+        if self.transaction_log:
+            last_snapshot = self.transaction_log.pop()
+            self.tables = last_snapshot['tables']
+            self.indexes = last_snapshot['indexes']
+            print("Transaction rolled back.")
+        else:
+            print("No transaction to rollback.")
+
+    def commit(self):
+        """Commit the transaction by clearing the transaction log."""
+        self.transaction_log.clear()
+        print("Transaction committed.")
+
+    # ----- Logging and Auditing -----
+    def log_operation(self, operation, table_name, data=None, condition=None):
+        """Log database operations with encrypted data for auditing purposes."""
+        log_entry = {
+            'operation': operation,
+            'table': table_name,
+            'data': hashlib.sha256(str(data).encode()).hexdigest() if data else None,
+            'condition': condition,
+            'user_role': self.role
+        }
+        self.logs.append(log_entry)
+        print(f"Logged operation: {operation} on {table_name}")
+
+    def view_logs(self):
+        """View logged operations."""
+        for log in self.logs:
+            print(log)
+
+    # ----- Core Operations -----
     def create_table(self, table_name, columns):
         self.tables[table_name] = {'columns': columns, 'rows': []}
         self.indexes[table_name] = {}
+        self.log_operation('create_table', table_name)
         print(f"Table {table_name} created with columns: {columns}")
 
     def insert(self, table_name, values):
+        self.check_permission('insert')
         if table_name not in self.tables:
             print("Table not found.")
             return
@@ -28,12 +106,20 @@ class ZKDatabase:
             if col_name not in self.indexes[table_name]:
                 self.indexes[table_name][col_name] = {}
             self.indexes[table_name][col_name][val] = len(self.tables[table_name]['rows']) - 1
+        self.log_operation('insert', table_name, data=values)
         print(f"Inserted: {values} into {table_name} (Encrypted)")
 
     def select(self, table_name, condition=None):
+        self.check_permission('select')
+        cached_result = self.get_cached_query(str(condition))
+        if cached_result:
+            print("Returning cached result.")
+            return cached_result
+
         if table_name not in self.tables:
             print("Table not found.")
             return []
+
         selected_rows = []
         for row, proof in self.tables[table_name]['rows']:
             decrypted_row = [self.he.decrypt(value) for value in row]
@@ -41,38 +127,64 @@ class ZKDatabase:
                 column_name, operator, value = condition
                 column_index = self.tables[table_name]['columns'].index(column_name)
                 row_value = decrypted_row[column_index]
-                if (
-                    (operator == '=' and row_value == value) or
-                    (operator == '>' and row_value > value) or
-                    (operator == '<' and row_value < value) or
-                    (operator == '>=' and row_value >= value) or
-                    (operator == '<=' and row_value <= value)
-                ):
+                if self._evaluate_condition(row_value, operator, value):
                     selected_rows.append((decrypted_row, proof))
+
+        self.cache_query(str(condition), selected_rows)
+        self.log_operation('select', table_name, condition=condition)
         return selected_rows
 
-    def aggregate_sum(self, table_name, column_name):
-        return self._aggregate(table_name, column_name, 'SUM')
+    def update(self, table_name, condition, update_values):
+        """Update rows based on the condition"""
+        self.check_permission('update')
+        self.begin_transaction()
 
-    def _aggregate(self, table_name, column_name, agg_type):
-        if table_name not in self.tables:
-            print("Table not found.")
-            return None, None
-        column_index = self.tables[table_name]['columns'].index(column_name)
-        aggregate_value = None
-        for row_data in self.tables[table_name]['rows']:
-            row, _proof = row_data
-            row_value = row[column_index]
-            if aggregate_value is None:
-                aggregate_value = row_value
-            else:
-                if agg_type == 'SUM':
-                    aggregate_value = self.he.add(aggregate_value, row_value)
-        decrypted_value = self.he.decrypt(aggregate_value)
-        proof, _ = self.zk_proof.generate_proof(decrypted_value)
-        return decrypted_value, proof
+        for row, proof in self.tables[table_name]['rows']:
+            decrypted_row = [self.he.decrypt(value) for value in row]
+            column_name, operator, value = condition
+            column_index = self.tables[table_name]['columns'].index(column_name)
+            row_value = decrypted_row[column_index]
+            if self._evaluate_condition(row_value, operator, value):
+                for update_col, new_value in update_values.items():
+                    update_index = self.tables[table_name]['columns'].index(update_col)
+                    encrypted_new_value = self.he.encrypt(new_value)
+                    row[update_index] = encrypted_new_value
+                self.log_operation('update', table_name, data=update_values)
+                print(f"Row updated: {decrypted_row}")
+        self.commit()
+
+    def delete(self, table_name, condition):
+        """Delete rows based on the condition"""
+        self.check_permission('delete')
+        self.begin_transaction()
+
+        self.tables[table_name]['rows'] = [
+            (row, proof) for row, proof in self.tables[table_name]['rows']
+            if not self._evaluate_condition([self.he.decrypt(value) for value in row], *condition)
+        ]
+        self.log_operation('delete', table_name, condition=condition)
+        print(f"Rows matching condition {condition} deleted from {table_name}")
+        self.commit()
+
+    def aggregate_sum(self, table_name, column_name):
+        self.check_permission('select')
+        cached_result = self.get_cached_query(f"SUM-{table_name}-{column_name}")
+        if cached_result:
+            print("Returning cached result.")
+            return cached_result
+
+        result = self._aggregate(table_name, column_name, 'SUM')
+        self.cache_query(f"SUM-{table_name}-{column_name}", result)
+        self.log_operation('aggregate_sum', table_name)
+        return result
 
     def join(self, table1, table2, table1_column, table2_column, join_type="inner"):
+        self.check_permission('select')
+        cached_result = self.get_cached_query(f"JOIN-{table1}-{table2}-{join_type}")
+        if cached_result:
+            print("Returning cached result.")
+            return cached_result
+
         if table1 not in self.tables or table2 not in self.tables:
             print("One of the tables not found.")
             return []
@@ -118,4 +230,19 @@ class ZKDatabase:
             else:
                 print(f"Proof failed for joined row: {decrypted_joined_row}")
 
+        self.cache_query(f"JOIN-{table1}-{table2}-{join_type}", joined_rows)
+        self.log_operation('join', f"{table1}-{table2}")
         return joined_rows
+
+    def _evaluate_condition(self, row_value, operator, value):
+        if operator == '=':
+            return row_value == value
+        elif operator == '>':
+            return row_value > value
+        elif operator == '<':
+            return row_value < value
+        elif operator == '>=':
+            return row_value >= value
+        elif operator == '<=':
+            return row_value <= value
+        return False
