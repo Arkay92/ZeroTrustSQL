@@ -72,12 +72,6 @@ class ZKDatabase:
         proof, _ = self.zk_proof.generate_proof(decrypted_value)
         return decrypted_value, proof
 
-    def verify_aggregate(self, result, proof):
-        if self.zk_proof.verify(proof, None, result):
-            print(f"Proof verified for aggregate result: {result}")
-        else:
-            print(f"Proof failed for aggregate result: {result}")
-
     def join(self, table1, table2, table1_column, table2_column, join_type="inner"):
         if table1 not in self.tables or table2 not in self.tables:
             print("One of the tables not found.")
@@ -85,14 +79,43 @@ class ZKDatabase:
         table1_data = self.tables[table1]
         table2_data = self.tables[table2]
         col1_idx = table1_data['columns'].index(table1_column)
-        col2_idx = table2_data['columns'].index(table2_column]
+        col2_idx = table2_data['columns'].index(table2_column)
         joined_rows = []
         indexed_table1 = self.indexes[table1].get(table1_column, {})
         indexed_table2 = self.indexes[table2].get(table2_column, {})
+
         if join_type == "inner":
-            for key in indexed_table1.keys() & indexed_table2.keys():
+            common_keys = indexed_table1.keys() & indexed_table2.keys()
+        elif join_type == "left":
+            common_keys = indexed_table1.keys()
+        elif join_type == "right":
+            common_keys = indexed_table2.keys()
+        elif join_type == "outer":
+            common_keys = indexed_table1.keys() | indexed_table2.keys()
+
+        for key in common_keys:
+            row1, row2 = None, None
+            proof1, proof2 = None, None
+
+            if key in indexed_table1:
                 row1, proof1 = table1_data['rows'][indexed_table1[key]]
-                row2, proof2 = table2_data['rows'][indexed_table2[key]]
                 decrypted_row1 = [self.he.decrypt(val) for val in row1]
+            else:
+                decrypted_row1 = [None] * len(table1_data['columns'])
+
+            if key in indexed_table2:
+                row2, proof2 = table2_data['rows'][indexed_table2[key]]
                 decrypted_row2 = [self.he.decrypt(val) for val in row2]
-                decrypted_joined_row = decrypted_row1 + decrypted_row2
+            else:
+                decrypted_row2 = [None] * len(table2_data['columns'])
+
+            decrypted_joined_row = decrypted_row1 + decrypted_row2
+            proof, _ = self.zk_proof.generate_proof(decrypted_joined_row)
+            joined_rows.append((decrypted_joined_row, proof))
+
+            if self.zk_proof.verify(proof, None, decrypted_joined_row):
+                print(f"Proof verified for joined row: {decrypted_joined_row}")
+            else:
+                print(f"Proof failed for joined row: {decrypted_joined_row}")
+
+        return joined_rows
