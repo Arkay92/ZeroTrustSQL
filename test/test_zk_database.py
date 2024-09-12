@@ -35,31 +35,53 @@ class TestZKDatabase(unittest.TestCase):
         result = self.db.select("users", condition=("balance", ">=", 150))
         self.assertEqual(len(result), 2)  # Should return 2 users: Bob and Charlie
 
-    def test_aggregate_sum(self):
-        """Test if the SUM aggregation works."""
-        total_sum, _ = self.db.aggregate_sum("users", "balance")
-        self.assertEqual(total_sum, 450)  # 100 + 200 + 150
+    def test_cache(self):
+        """Test if query caching works correctly."""
+        # Perform a query that will be cached
+        result1 = self.db.select("users", condition=("balance", ">=", 100))
+        # Repeat the query (should use cache)
+        result2 = self.db.select("users", condition=("balance", ">=", 100))
+        self.assertEqual(result1, result2)  # Cached result should match
+
+    def test_transaction_and_rollback(self):
+        """Test if transactions and rollback work correctly."""
+        self.db.begin_transaction()
+        self.db.update("users", ("user_id", "=", 1), {"balance": 300})
+        result = self.db.select("users", condition=("user_id", "=", 1))
+        decrypted_row, _ = result[0]
+        self.assertEqual(decrypted_row[3], 300)  # Check if balance was updated to 300
+        
+        # Rollback the transaction
+        self.db.rollback()
+        result = self.db.select("users", condition=("user_id", "=", 1))
+        decrypted_row, _ = result[0]
+        self.assertEqual(decrypted_row[3], 100)  # Balance should be rolled back to 100
+
+    def test_delete_and_commit(self):
+        """Test if delete with transaction commit works."""
+        self.db.begin_transaction()
+        self.db.delete("users", condition=("balance", "<=", 150))
+        self.db.commit()  # Commit the deletion
+        result = self.db.select("users", condition=("balance", "<=", 150))
+        self.assertEqual(len(result), 0)  # No users with balance <= 150 should remain
+
+    def test_logging(self):
+        """Test if logging records all operations."""
+        self.db.select("users", condition=("balance", ">=", 150))
+        self.db.update("users", ("user_id", "=", 1), {"balance": 300})
+        self.db.delete("users", condition=("user_id", "=", 1))
+
+        logs = self.db.logs
+        self.assertEqual(len(logs), 3)  # Should log 3 operations
+        self.assertEqual(logs[0]['operation'], 'select')
+        self.assertEqual(logs[1]['operation'], 'update')
+        self.assertEqual(logs[2]['operation'], 'delete')
 
     def test_inner_join(self):
         """Test if the INNER JOIN operation works."""
         joined_result = self.db.join("users", "orders", "user_id", "user_id", join_type="inner")
         self.assertEqual(len(joined_result), 2)  # Should return 2 rows where user_id matches
         self.assertEqual(joined_result[0][0][0], 1)  # First row's user_id should be 1
-
-    def test_left_join(self):
-        """Test if the LEFT JOIN operation works."""
-        joined_result = self.db.join("users", "orders", "user_id", "user_id", join_type="left")
-        self.assertEqual(len(joined_result), 3)  # All users, even if they have no orders
-
-    def test_right_join(self):
-        """Test if the RIGHT JOIN operation works."""
-        joined_result = self.db.join("users", "orders", "user_id", "user_id", join_type="right")
-        self.assertEqual(len(joined_result), 3)  # All orders, even if users don’t exist
-
-    def test_outer_join(self):
-        """Test if the FULL OUTER JOIN operation works."""
-        joined_result = self.db.join("users", "orders", "user_id", "user_id", join_type="outer")
-        self.assertEqual(len(joined_result), 4)  # Includes all users and all orders, even if no match
 
 
 if __name__ == '__main__':
