@@ -8,8 +8,10 @@ class ZKProof:
     def _hash(self, x):
         return hashlib.sha256(str(x).encode('utf-8') + self.salt).hexdigest()
 
-    def generate_proof(self, data):
-        return self._hash(data)
+    def generate_proof(self, data, condition=None):
+        self.v = self._hash(data)
+        condition_proof = self._hash(condition) if condition else None
+        return self.v, condition_proof
 
-    def verify(self, proof, data):
-        return self._hash(data) == proof
+    def verify(self, proof, condition_proof, data, condition=None):
+        return self._hash(data) == proof and (not condition or self._hash(condition) == condition_proof)
