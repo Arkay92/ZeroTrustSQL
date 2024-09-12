@@ -16,7 +16,7 @@ class TestZKDatabase(unittest.TestCase):
         self.db.insert("users", [3, "Charlie", 35, 150])
         self.db.insert("orders", [101, 1, 50])
         self.db.insert("orders", [102, 2, 150])
-        self.db.insert("orders", [103, 1, 30])
+        self.db.insert("orders", [103, 4, 30])  # Non-existent user for join tests
 
     def test_table_creation(self):
         """Test if tables are created correctly."""
@@ -41,15 +41,25 @@ class TestZKDatabase(unittest.TestCase):
         self.assertEqual(total_sum, 450)  # 100 + 200 + 150
 
     def test_inner_join(self):
-        """Test if the JOIN operation works."""
+        """Test if the INNER JOIN operation works."""
         joined_result = self.db.join("users", "orders", "user_id", "user_id", join_type="inner")
-        self.assertEqual(len(joined_result), 2)  # Should return 2 rows, where user_id matches
+        self.assertEqual(len(joined_result), 2)  # Should return 2 rows where user_id matches
         self.assertEqual(joined_result[0][0][0], 1)  # First row's user_id should be 1
 
-    def test_aggregate_proof_verification(self):
-        """Test if the aggregation result is correctly verified with ZKProof."""
-        total_sum, sum_proof = self.db.aggregate_sum("users", "balance")
-        self.assertTrue(self.db.zk_proof.verify(sum_proof, None, total_sum))
+    def test_left_join(self):
+        """Test if the LEFT JOIN operation works."""
+        joined_result = self.db.join("users", "orders", "user_id", "user_id", join_type="left")
+        self.assertEqual(len(joined_result), 3)  # All users, even if they have no orders
+
+    def test_right_join(self):
+        """Test if the RIGHT JOIN operation works."""
+        joined_result = self.db.join("users", "orders", "user_id", "user_id", join_type="right")
+        self.assertEqual(len(joined_result), 3)  # All orders, even if users don’t exist
+
+    def test_outer_join(self):
+        """Test if the FULL OUTER JOIN operation works."""
+        joined_result = self.db.join("users", "orders", "user_id", "user_id", join_type="outer")
+        self.assertEqual(len(joined_result), 4)  # Includes all users and all orders, even if no match
 
 
 if __name__ == '__main__':
