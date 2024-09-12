@@ -1,0 +1,12 @@
+Metadata-Version: 2.1
+Name: ZeroTrustSQL
+Version: 0.1.0
+Summary: A fully encrypted database solution with SQL-like operations and Zero-Knowledge Proofs.
+Home-page: https://github.com/Arkay92/ZeroTrustSQL
+Author: Robert McMenemy
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Requires-Dist: lightphe
+Requires-Dist: pycryptodome

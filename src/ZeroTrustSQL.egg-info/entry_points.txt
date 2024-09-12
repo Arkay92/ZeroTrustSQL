@@ -1,0 +1,2 @@
+[console_scripts]
+zerotrustsql = src.main:main

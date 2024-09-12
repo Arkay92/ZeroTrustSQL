@@ -1,0 +1,10 @@
+MANIFEST.in
+README.md
+setup.py
+src/ZeroTrustSQL.egg-info/PKG-INFO
+src/ZeroTrustSQL.egg-info/SOURCES.txt
+src/ZeroTrustSQL.egg-info/dependency_links.txt
+src/ZeroTrustSQL.egg-info/entry_points.txt
+src/ZeroTrustSQL.egg-info/requires.txt
+src/ZeroTrustSQL.egg-info/top_level.txt
+test/test_zk_database.py
