@@ -16,18 +16,20 @@
 ZeroTrustSQL/
 │
 ├── src/
-│   ├── __init__.py                 # Package initializer
-│   ├── homomorphic_encryption.py   # Homomorphic encryption logic
-│   ├── zero_knowledge_proof.py     # ZKProof generation and verification logic
-│   ├── zk_database.py              # SQL-like database operations on encrypted data
-│   ├── utils.py                    # Helper functions for string-to-integer conversions
-│   └── main.py                     # Example usage of the database system
+│   ├── __init__.py                     # Package initializer
+│   ├── homomorphic_encryption.py       # Homomorphic encryption logic
+│   ├── utils.py                        # Utility functions
+│   ├── zero_knowledge_proof.py         # ZKProof generation and verification logic
+│   ├── zk_database.py                  # Encrypted SQL-like database operations
 │
-├── tests/
-│   └── test_zk_database.py         # Unit tests for ZKDatabase functionality
+├── test/
+│   └── test_zk_database.py             # Unit tests for ZKDatabase functionality
 │
-├── requirements.txt                # Project dependencies
-└── README.md                       # This file
+├── main.py                             # Example usage of the database system
+├── MANIFEST.in                         # Manifest for including non-code files in distribution
+├── README.md                           # Project documentation
+├── requirements.txt                    # Project dependencies
+└── setup.py                            # Packaging configuration
 ```
 
 ## Getting Started
@@ -54,7 +56,7 @@ Example Operations:
 ## Testing
 To run the unit tests and ensure everything works correctly:
 ```
-python -m unittest discover -s tests
+python -m unittest test/test_zk_database.py
 ```
 
 Tests include:
