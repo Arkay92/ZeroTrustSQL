@@ -1,4 +1,4 @@
-from zk_database import ZKDatabase
+from src.zk_database import ZKDatabase
 
 if __name__ == "__main__":
     # Initialize the database with admin role

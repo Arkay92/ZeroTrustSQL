@@ -121,6 +121,7 @@ class ZKDatabase:
             return []
 
         selected_rows = []
+        
         for row, proof in self.tables[table_name]['rows']:
             decrypted_row = [self.he.decrypt(value) for value in row]
             if condition:
@@ -158,10 +159,14 @@ class ZKDatabase:
         self.check_permission('delete')
         self.begin_transaction()
 
+        column_name, operator, value = condition
+        column_index = self.tables[table_name]['columns'].index(column_name)
+
         self.tables[table_name]['rows'] = [
             (row, proof) for row, proof in self.tables[table_name]['rows']
-            if not self._evaluate_condition([self.he.decrypt(value) for value in row], *condition)
+            if not self._evaluate_condition(self.he.decrypt(row[column_index]), operator, value)
         ]
+
         self.log_operation('delete', table_name, condition=condition)
         print(f"Rows matching condition {condition} deleted from {table_name}")
         self.commit()
