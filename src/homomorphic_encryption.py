@@ -1,5 +1,6 @@
 import random
 
+# Define a secret key globally (used by HomomorphicEncryption)
 secret_key = [random.randint(0, (1 << 32) - 1) for _ in range(512)]
 
 class HomomorphicEncryption:
